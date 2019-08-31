@@ -11,6 +11,7 @@
 import Apecs
 import Apecs.Gloss
 import Control.Monad
+import Data.Traversable
 import Graphics.Gloss.Data.Bitmap
 import Linear
 import System.Exit
@@ -24,7 +25,7 @@ newtype Velocity = Velocity (V2 Float) deriving (Show)
 
 instance Component Velocity where type Storage Velocity = Map Velocity
 
-data Target = Target deriving (Show)
+newtype Target = Target Int deriving (Show)
 
 instance Component Target where type Storage Target = Map Target
 
@@ -78,6 +79,9 @@ worldWidth = 600
 
 worldHeight = 800
 
+alienCount :: Int
+alienCount = 5
+
 playerSpeed, bulletSpeed, enemySpeed, xmin, xmax :: Float
 playerSpeed = 170
 
@@ -116,7 +120,7 @@ incrTime dT = modify global $ \(Time t) -> Time (t + dT)
 
 clearTargets :: System' ()
 clearTargets =
-  cmap $ \allEntities@(Target, Position (V2 x _), Velocity _) ->
+  cmap $ \allEntities@(Target {}, Position (V2 x _), Velocity _) ->
     if x < xmin || x > xmax
       then Nothing
       else Just allEntities
@@ -137,7 +141,7 @@ clearBullets =
 
 handleCollisions :: SystemT World IO ()
 handleCollisions =
-  cmapM_ $ \(Target, Position posT, etyT) ->
+  cmapM_ $ \(Target {}, Position posT, etyT) ->
     cmapM_ $ \(Bullet, Position posB, etyB) ->
       when (norm (posT - posB) < 10) $ do
         destroy etyT (Proxy @(Target, Kinetic))
@@ -169,11 +173,16 @@ step dT = do
   clearBullets
   stepParticles dT
   handleCollisions
-  triggerEvery dT 0.6 0
-    $ newEntity (Target, Position (V2 xmin 80), Velocity (V2 enemySpeed 0))
-  triggerEvery dT 0.6 0.3
-    $ newEntity
-        (Target, Position (V2 xmax 120), Velocity (V2 (negate enemySpeed) 0))
+  triggerEvery dT 1 0
+    $ do
+      n <- pickAlien
+      newEntity (Target n, Position (V2 xmin 100), Velocity (V2 enemySpeed 0))
+  triggerEvery dT 1 0.5
+    $ do
+      n <- pickAlien
+      newEntity (Target n, Position (V2 xmax 170), Velocity (- V2 enemySpeed 0))
+  where
+    pickAlien = liftIO $ randomRIO (0, alienCount - 1)
 
 handleEvent :: Event -> System' ()
 handleEvent = \case
@@ -195,20 +204,18 @@ handleEvent = \case
 translatePos :: Position -> Picture -> Picture
 translatePos (Position (V2 x y)) = translate x y
 
-diamond :: Picture
-diamond = Line [(-1, 0), (0, -1), (1, 0), (0, 1), (-1, 0)]
-
-data Assets = Assets {fire, ship :: Picture, shipHeight :: Int}
+data Assets = Assets {aliens :: [Picture], fire :: Picture, ship :: BitmapData}
 
 draw :: Assets -> System' Picture
-draw Assets {fire, ship, shipHeight} = do
+draw Assets {aliens, fire, ship} = do
   player <-
     foldDraw
       $ \(Player, pos) ->
-        translatePos pos $ translate 0 (- fromIntegral shipHeight / 2) ship
-  targets <-
-    foldDraw
-      $ \(Target, pos) -> translatePos pos $ color red $ scale 10 10 diamond
+        let (_, shipHeight) = bitmapSize ship
+         in translatePos pos
+              $ translate 0 (- fromIntegral shipHeight / 2)
+              $ bitmap ship
+  targets <- foldDraw $ \(Target n, pos) -> translatePos pos $ aliens !! n
   bullets <- foldDraw $ \(Bullet, pos) -> translatePos pos fire
   particles <-
     foldDraw
@@ -238,7 +245,15 @@ main = do
 
 loadAssets :: IO Assets
 loadAssets = do
+  aliens <- for alienShips $ fmap (scale 0.5 0.5) . loadBMP
   fire <- loadBMP "images/fire.bmp"
-  ship@(Bitmap shipBmp) <- loadBMP "images/ship.bmp"
-  let (_, shipHeight) = bitmapSize shipBmp
-  pure Assets {fire, ship, shipHeight}
+  Bitmap ship <- loadBMP "images/ship.bmp"
+  pure Assets {aliens, fire, ship}
+  where
+    alienShips =
+      [ "images/shipBeige_manned.bmp",
+        "images/shipBlue_manned.bmp",
+        "images/shipGreen_manned.bmp",
+        "images/shipPink_manned.bmp",
+        "images/shipYellow_manned.bmp"
+        ]
