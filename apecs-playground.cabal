@@ -1,0 +1,18 @@
+cabal-version: 2.2
+
+name: apecs-playground
+version: 0
+build-type: Simple
+
+common language
+  build-depends: base
+
+executable shmup-gloss
+  import: language
+  build-depends:
+    apecs,
+    apecs-gloss,
+    linear,
+    random,
+  hs-source-dirs: shmup-gloss
+  main-is: Main.hs
