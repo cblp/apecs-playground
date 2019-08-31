@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -94,7 +95,7 @@ hitBonus = 100
 missPenalty = 40
 
 playerStartPos, scorePos :: V2 Float
-playerStartPos = V2 0 (- fromIntegral worldHeight * 0.4)
+playerStartPos = V2 0 (- fromIntegral worldHeight * 0.3)
 
 scorePos = V2 xmin (- fromIntegral worldHeight / 2)
 
@@ -185,9 +186,9 @@ handleEvent = \case
   EventKey (SpecialKey KeyRight) Up _ _ ->
     cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x - playerSpeed) 0)
   EventKey (SpecialKey KeySpace) Down _ _ ->
-    cmapM_ $ \(Player, pos) -> do
+    cmapM_ $ \(Player, pos :: Position) -> do
       _bullet <- newEntity (Bullet, pos, Velocity (V2 0 bulletSpeed))
-      spawnParticles 7 pos (-80, 80) (10, 100)
+      pure ()
   EventKey (SpecialKey KeyEsc) Down _ _ -> liftIO exitSuccess
   _ -> pure ()
 
@@ -197,17 +198,18 @@ translatePos (Position (V2 x y)) = translate x y
 diamond :: Picture
 diamond = Line [(-1, 0), (0, -1), (1, 0), (0, 1), (-1, 0)]
 
-newtype Assets = Assets {ship :: Picture}
+data Assets = Assets {fire, ship :: Picture, shipHeight :: Int}
 
 draw :: Assets -> System' Picture
-draw Assets {ship} = do
-  player <- foldDraw $ \(Player, pos) -> translatePos pos ship
+draw Assets {fire, ship, shipHeight} = do
+  player <-
+    foldDraw
+      $ \(Player, pos) ->
+        translatePos pos $ translate 0 (- fromIntegral shipHeight / 2) ship
   targets <-
     foldDraw
       $ \(Target, pos) -> translatePos pos $ color red $ scale 10 10 diamond
-  bullets <-
-    foldDraw
-      $ \(Bullet, pos) -> translatePos pos $ color yellow $ scale 4 4 diamond
+  bullets <- foldDraw $ \(Bullet, pos) -> translatePos pos fire
   particles <-
     foldDraw
       $ \(Particle _, Velocity (V2 vx vy), pos) ->
@@ -236,5 +238,7 @@ main = do
 
 loadAssets :: IO Assets
 loadAssets = do
-  ship <- loadBMP "images/ship.bmp"
-  pure Assets {ship}
+  fire <- loadBMP "images/fire.bmp"
+  ship@(Bitmap shipBmp) <- loadBMP "images/ship.bmp"
+  let (_, shipHeight) = bitmapSize shipBmp
+  pure Assets {fire, ship, shipHeight}
