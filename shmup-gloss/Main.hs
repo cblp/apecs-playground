@@ -147,7 +147,7 @@ handleCollisions :: SystemT World IO ()
 handleCollisions =
   cmapM_ $ \(Target {}, Position posT, etyT) ->
     cmapM_ $ \(Bullet, Position posB, etyB) ->
-      when (norm (posT - posB) < 10) $ do
+      when (norm (posT - posB) < 30) $ do
         destroy etyT (Proxy @(Target, Kinetic))
         destroy etyB (Proxy @(Bullet, Kinetic))
         spawnParticles 15 (Position posB) (-500, 500) (200, -50)
