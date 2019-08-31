@@ -5,6 +5,7 @@ version: 0
 build-type: Simple
 
 common language
+  default-language: Haskell2010
   build-depends: base
 
 executable shmup-gloss
@@ -12,6 +13,7 @@ executable shmup-gloss
   build-depends:
     apecs,
     apecs-gloss,
+    gloss,
     linear,
     random,
   hs-source-dirs: shmup-gloss

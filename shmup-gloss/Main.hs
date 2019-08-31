@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -9,6 +10,7 @@
 import Apecs
 import Apecs.Gloss
 import Control.Monad
+import Graphics.Gloss.Data.Bitmap
 import Linear
 import System.Exit
 import System.Random
@@ -70,6 +72,11 @@ type System' a = System World a
 
 type Kinetic = (Position, Velocity)
 
+worldWidth, worldHeight :: Int
+worldWidth = 600
+
+worldHeight = 800
+
 playerSpeed, bulletSpeed, enemySpeed, xmin, xmax :: Float
 playerSpeed = 170
 
@@ -77,23 +84,23 @@ bulletSpeed = 500
 
 enemySpeed = 80
 
-xmin = -100
+xmin = - fromIntegral worldWidth / 2
 
-xmax = 100
+xmax = fromIntegral worldWidth / 2
 
 hitBonus, missPenalty :: Int
 hitBonus = 100
 
 missPenalty = 40
 
-playerPos, scorePos :: V2 Float
-playerPos = V2 0 (-120)
+playerStartPos, scorePos :: V2 Float
+playerStartPos = V2 0 (- fromIntegral worldHeight * 0.4)
 
-scorePos = V2 xmin (-170)
+scorePos = V2 xmin (- fromIntegral worldHeight / 2)
 
 initialize :: System' ()
 initialize = do
-  _player <- newEntity (Player, Position playerPos, Velocity 0)
+  _player <- newEntity (Player, Position playerStartPos, Velocity 0)
   pure ()
 
 stepPosition :: Float -> System' ()
@@ -184,38 +191,50 @@ handleEvent = \case
   EventKey (SpecialKey KeyEsc) Down _ _ -> liftIO exitSuccess
   _ -> pure ()
 
-translate' :: Position -> Picture -> Picture
-translate' (Position (V2 x y)) = translate x y
+translatePos :: Position -> Picture -> Picture
+translatePos (Position (V2 x y)) = translate x y
 
-triangle, diamond :: Picture
-triangle = Line [(0, 0), (-0.5, -1), (0.5, -1), (0, 0)]
-
+diamond :: Picture
 diamond = Line [(-1, 0), (0, -1), (1, 0), (0, 1), (-1, 0)]
 
-draw :: System' Picture
-draw = do
-  player <-
-    foldDraw
-      $ \(Player, pos) -> translate' pos . color white . scale 10 20 $ triangle
+newtype Assets = Assets {ship :: Picture}
+
+draw :: Assets -> System' Picture
+draw Assets {ship} = do
+  player <- foldDraw $ \(Player, pos) -> translatePos pos ship
   targets <-
     foldDraw
-      $ \(Target, pos) -> translate' pos . color red . scale 10 10 $ diamond
+      $ \(Target, pos) -> translatePos pos $ color red $ scale 10 10 diamond
   bullets <-
     foldDraw
-      $ \(Bullet, pos) -> translate' pos . color yellow . scale 4 4 $ diamond
+      $ \(Bullet, pos) -> translatePos pos $ color yellow $ scale 4 4 diamond
   particles <-
     foldDraw
       $ \(Particle _, Velocity (V2 vx vy), pos) ->
-        translate' pos . color orange $ Line [(0, 0), (vx / 10, vy / 10)]
+        translatePos pos . color orange $ Line [(0, 0), (vx / 10, vy / 10)]
   Score s <- get global
   let score =
-        color white . translate' (Position scorePos) . scale 0.1 0.1
+        color white
+          $ translatePos (Position scorePos)
+          $ scale 0.1 0.1
           $ Text ("Score: " ++ show s)
   pure $ player <> targets <> bullets <> score <> particles
 
 main :: IO ()
 main = do
+  assets <- loadAssets
   w <- initWorld
   runWith w $ do
     initialize
-    play (InWindow "Shmup" (220, 360) (10, 10)) black 60 draw handleEvent step
+    play
+      (InWindow "Shmup" (worldWidth + 20, worldHeight + 20) (10, 10))
+      black
+      60
+      (draw assets)
+      handleEvent
+      step
+
+loadAssets :: IO Assets
+loadAssets = do
+  ship <- loadBMP "images/ship.bmp"
+  pure Assets {ship}
