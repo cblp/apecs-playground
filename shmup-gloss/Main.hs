@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
@@ -8,7 +9,6 @@
 import Apecs
 import Apecs.Gloss
 import Control.Monad
-import Data.Semigroup (Semigroup)
 import Linear
 import System.Exit
 import System.Random
@@ -94,7 +94,7 @@ scorePos = V2 xmin (-170)
 initialize :: System' ()
 initialize = do
   _player <- newEntity (Player, Position playerPos, Velocity 0)
-  return ()
+  pure ()
 
 stepPosition :: Float -> System' ()
 stepPosition dT = cmap $ \(Position p, Velocity v) -> Position (p + dT *^ v)
@@ -107,22 +107,25 @@ incrTime :: Float -> System' ()
 incrTime dT = modify global $ \(Time t) -> Time (t + dT)
 
 clearTargets :: System' ()
-clearTargets = cmap $ \allEntities@(Target, Position (V2 x _), Velocity _) ->
-  if x < xmin || x > xmax
-    then Nothing
-    else Just allEntities
+clearTargets =
+  cmap $ \allEntities@(Target, Position (V2 x _), Velocity _) ->
+    if x < xmin || x > xmax
+      then Nothing
+      else Just allEntities
 
 stepParticles :: Float -> System' ()
-stepParticles dT = cmap $ \(Particle t) ->
-  if t < 0
-    then Right $ Not @(Particle, Kinetic)
-    else Left $ Particle (t - dT)
+stepParticles dT =
+  cmap $ \(Particle t) ->
+    if t < 0
+      then Right $ Not @(Particle, Kinetic)
+      else Left $ Particle (t - dT)
 
 clearBullets :: System' ()
-clearBullets = cmap $ \(Bullet, Position (V2 _ y), Score s) ->
-  if y > 170
-    then Right (Not @(Bullet, Kinetic), Score (s - missPenalty))
-    else Left ()
+clearBullets =
+  cmap $ \(Bullet, Position (V2 _ y), Score s) ->
+    if y > 170
+      then Right (Not @(Bullet, Kinetic), Score (s - missPenalty))
+      else Left ()
 
 handleCollisions :: SystemT World IO ()
 handleCollisions =
@@ -165,20 +168,21 @@ step dT = do
         (Target, Position (V2 xmax 120), Velocity (V2 (negate enemySpeed) 0))
 
 handleEvent :: Event -> System' ()
-handleEvent (EventKey (SpecialKey KeyLeft) Down _ _) =
-  cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x - playerSpeed) 0)
-handleEvent (EventKey (SpecialKey KeyLeft) Up _ _) =
-  cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x + playerSpeed) 0)
-handleEvent (EventKey (SpecialKey KeyRight) Down _ _) =
-  cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x + playerSpeed) 0)
-handleEvent (EventKey (SpecialKey KeyRight) Up _ _) =
-  cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x - playerSpeed) 0)
-handleEvent (EventKey (SpecialKey KeySpace) Down _ _) =
-  cmapM_ $ \(Player, pos) -> do
-    _bullet <- newEntity (Bullet, pos, Velocity (V2 0 bulletSpeed))
-    spawnParticles 7 pos (-80, 80) (10, 100)
-handleEvent (EventKey (SpecialKey KeyEsc) Down _ _) = liftIO exitSuccess
-handleEvent _ = return ()
+handleEvent = \case
+  EventKey (SpecialKey KeyLeft) Down _ _ ->
+    cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x - playerSpeed) 0)
+  EventKey (SpecialKey KeyLeft) Up _ _ ->
+    cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x + playerSpeed) 0)
+  EventKey (SpecialKey KeyRight) Down _ _ ->
+    cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x + playerSpeed) 0)
+  EventKey (SpecialKey KeyRight) Up _ _ ->
+    cmap $ \(Player, Velocity (V2 x _)) -> Velocity (V2 (x - playerSpeed) 0)
+  EventKey (SpecialKey KeySpace) Down _ _ ->
+    cmapM_ $ \(Player, pos) -> do
+      _bullet <- newEntity (Bullet, pos, Velocity (V2 0 bulletSpeed))
+      spawnParticles 7 pos (-80, 80) (10, 100)
+  EventKey (SpecialKey KeyEsc) Down _ _ -> liftIO exitSuccess
+  _ -> pure ()
 
 translate' :: Position -> Picture -> Picture
 translate' (Position (V2 x y)) = translate x y
@@ -206,10 +210,8 @@ draw = do
   Score s <- get global
   let score =
         color white . translate' (Position scorePos) . scale 0.1 0.1
-          $ Text
-          $ "Score: "
-          ++ show s
-  return $ player <> targets <> bullets <> score <> particles
+          $ Text ("Score: " ++ show s)
+  pure $ player <> targets <> bullets <> score <> particles
 
 main :: IO ()
 main = do
