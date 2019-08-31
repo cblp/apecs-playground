@@ -82,7 +82,7 @@ worldHeight = 800
 alienCount :: Int
 alienCount = 5
 
-playerSpeed, bulletSpeed, enemySpeed, xmin, xmax :: Float
+playerSpeed, bulletSpeed, enemySpeed, xmin, xmax, ymin, ymax :: Float
 playerSpeed = 170
 
 bulletSpeed = 500
@@ -93,15 +93,19 @@ xmin = - fromIntegral worldWidth / 2
 
 xmax = fromIntegral worldWidth / 2
 
+ymin = - fromIntegral worldHeight / 2
+
+ymax = fromIntegral worldHeight / 2
+
 hitBonus, missPenalty :: Int
 hitBonus = 100
 
 missPenalty = 40
 
 playerStartPos, scorePos :: V2 Float
-playerStartPos = V2 0 (- fromIntegral worldHeight * 0.3)
+playerStartPos = V2 0 (ymin * 0.3)
 
-scorePos = V2 xmin (- fromIntegral worldHeight / 2)
+scorePos = V2 (xmin + 10) (ymin + 10)
 
 initialize :: System' ()
 initialize = do
@@ -121,7 +125,7 @@ incrTime dT = modify global $ \(Time t) -> Time (t + dT)
 clearTargets :: System' ()
 clearTargets =
   cmap $ \allEntities@(Target {}, Position (V2 x _), Velocity _) ->
-    if x < xmin || x > xmax
+    if x < xmin - 50 || x > xmax + 50
       then Nothing
       else Just allEntities
 
@@ -135,7 +139,7 @@ stepParticles dT =
 clearBullets :: System' ()
 clearBullets =
   cmap $ \(Bullet, Position (V2 _ y), Score s) ->
-    if y > 170
+    if y > ymax
       then Right (Not @(Bullet, Kinetic), Score (s - missPenalty))
       else Left ()
 
@@ -176,11 +180,13 @@ step dT = do
   triggerEvery dT 1 0
     $ do
       n <- pickAlien
-      newEntity (Target n, Position (V2 xmin 100), Velocity (V2 enemySpeed 0))
+      newEntity
+        (Target n, Position (V2 (xmin - 50) 100), Velocity (V2 enemySpeed 0))
   triggerEvery dT 1 0.5
     $ do
       n <- pickAlien
-      newEntity (Target n, Position (V2 xmax 170), Velocity (- V2 enemySpeed 0))
+      newEntity
+        (Target n, Position (V2 (xmax + 50) 170), Velocity (- V2 enemySpeed 0))
   where
     pickAlien = liftIO $ randomRIO (0, alienCount - 1)
 
@@ -236,7 +242,7 @@ main = do
   runWith w $ do
     initialize
     play
-      (InWindow "Shmup" (worldWidth + 20, worldHeight + 20) (10, 10))
+      (InWindow "Shmup" (worldWidth, worldHeight) (10, 10))
       black
       60
       (draw assets)
