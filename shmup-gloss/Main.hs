@@ -103,7 +103,7 @@ hitBonus = 100
 missPenalty = 40
 
 playerStartPos, scorePos :: V2 Float
-playerStartPos = V2 0 (ymin * 0.3)
+playerStartPos = V2 0 (ymin * 0.6)
 
 scorePos = V2 (xmin + 10) (ymin + 10)
 
